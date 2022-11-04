@@ -1,0 +1,12 @@
+{
+  "name": "data-yeeter-server",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node ./build/index.js",
+    "gcp-build": "tsc -p .",
+    "deploy": "gcloud app deploy"
+  },
+  "devDependencies": {
+    "typescript": "^4.8.4"
+  }
+}
