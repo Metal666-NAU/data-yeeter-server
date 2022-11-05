@@ -1,12 +1,22 @@
 {
   "name": "data-yeeter-server",
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "start": "node ./build/index.js",
     "gcp-build": "tsc -p .",
     "deploy": "gcloud app deploy"
   },
   "devDependencies": {
+    "@types/express": "^4.17.14",
+    "@types/node": "^18.11.9",
     "typescript": "^4.8.4"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "^4.1.3",
+    "@types/express-session": "^1.17.5",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "memorystore": "^1.6.7"
   }
 }
