@@ -51,7 +51,7 @@ app.use(session(sess));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-app.post("/goOnline", (req, res) => {
+app.post("user/goOnline", (req, res) => {
   console.log(`User with uuid ${req.body.uuid} is going online...`);
 
   req.session.user = userManager.addUser(req.body.uuid);
@@ -69,7 +69,74 @@ app.post("/goOnline", (req, res) => {
   res.json(req.session.user);
 });
 
-app.post("/goOffline", (req, res) => {
+app.post("user/enableDiscovery", (req, res) => {
+  console.log(`User with uuid ${req.body.uuid} is enabling discovery...`);
+
+  if (!req.session.user) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  req.session.user.visible = true;
+
+  res.sendStatus(200);
+});
+
+app.post("user/disableDiscovery", (req, res) => {
+  console.log(`User with uuid ${req.body.uuid} is disabling discovery...`);
+
+  if (!req.session.user) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  req.session.user.visible = false;
+
+  res.sendStatus(200);
+});
+
+app.post("user/startAddingFriend", (req, res) => {
+  if (!req.session.user) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  let friendship = userManager.addFriendship(
+    req.session.user,
+    req.body.discoveryCode
+  );
+
+  if (!friendship) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  res.sendStatus(200);
+});
+
+app.post("user/finishAddingFriend", (req, res) => {
+  if (!req.session.user) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  let friendship = userManager.findFriendship(req.session.user);
+
+  if (!friendship) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  res.sendStatus(200);
+});
+
+app.post("user/goOffline", (req, res) => {
   let user = req.session.user;
 
   console.log(`Logging user out: ${JSON.stringify(user)}`);
@@ -85,18 +152,6 @@ app.post("/goOffline", (req, res) => {
       console.error(`User ${JSON.stringify(user)} failed to go offline!`);
     }
   });
-});
-
-app.post("/addFriend", (req, res) => {
-  let user = userManager.findUser(req.body.discoveryCode);
-
-  if (user === undefined) {
-    res.sendStatus(400);
-
-    return;
-  }
-
-  res.json(user);
 });
 
 app.listen(PORT, () => {
