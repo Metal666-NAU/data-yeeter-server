@@ -4,12 +4,12 @@ import memorystore from "memorystore";
 import session, { SessionData, SessionOptions } from "express-session";
 
 import { PORT } from "./constants.js";
-import { UserManager } from "./user_manager.js";
+import { FileShare, FileShareManager } from "./fileshare_manager.js";
 
 const app: Express = express();
 const secretManagerServiceClient = new SecretManagerServiceClient();
 const MemoryStore = memorystore(session);
-const userManager = new UserManager();
+const fileShareManager = new FileShareManager();
 
 const cookieSecret = new TextDecoder().decode(
   (
@@ -35,7 +35,7 @@ let sess: SessionOptions = {
     noDisposeOnSet: true,
     //ttl: 1000 * 10,
     dispose: (key, value) => {
-      userManager.removeUser((value as SessionData).user);
+      fileShareManager.dropFileShare((value as SessionData).user.uuid);
     },
   }),
 };
@@ -51,109 +51,124 @@ app.use(session(sess));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-app.post("user/goOnline", (req, res) => {
-  console.log(`User with uuid ${req.body.uuid} is going online...`);
-
-  req.session.user = userManager.addUser(req.body.uuid);
-
-  if (!req.session.user) {
-    console.warn(`Failed to log user with uuid ${req.body.uuid} in!`);
-
-    res.sendStatus(400);
-
-    return;
-  }
-
-  console.log(`A user went online: ${JSON.stringify(req.session.user)}`);
-
-  res.json(req.session.user);
-});
-
-app.post("user/enableDiscovery", (req, res) => {
-  console.log(`User with uuid ${req.body.uuid} is enabling discovery...`);
-
-  if (!req.session.user) {
-    res.sendStatus(400);
-
-    return;
-  }
-
-  req.session.user.visible = true;
-
-  res.sendStatus(200);
-});
-
-app.post("user/disableDiscovery", (req, res) => {
-  console.log(`User with uuid ${req.body.uuid} is disabling discovery...`);
-
-  if (!req.session.user) {
-    res.sendStatus(400);
-
-    return;
-  }
-
-  req.session.user.visible = false;
-
-  res.sendStatus(200);
-});
-
-app.post("user/startAddingFriend", (req, res) => {
-  if (!req.session.user) {
-    res.sendStatus(400);
-
-    return;
-  }
-
-  let friendship = userManager.addFriendship(
-    req.session.user,
-    req.body.discoveryCode
+app.post("/startFileShare", (req, res) => {
+  console.log(
+    `Starting fileshare from ${req.body.uuid} to ${req.body.targetUuid}...`
   );
 
-  if (!friendship) {
+  req.session.user = new User(req.body.uuid);
+
+  fileShareManager.createNewFileShare(
+    req.session.user.uuid,
+    req.body.targetUuid,
+    req.body.offer
+  );
+
+  res.sendStatus(200);
+});
+
+app.get("/connectToFileShare", (req, res) => {
+  let uuid = req.query.uuid as string | undefined;
+  let sourceUuid = req.query.sourceUuid as string | undefined;
+
+  console.log(`${uuid} tries to accept fileshare from ${sourceUuid}...`);
+
+  if (!uuid || !sourceUuid) {
     res.sendStatus(400);
 
     return;
   }
 
-  res.sendStatus(200);
+  req.session.user = new User(uuid);
+
+  let fileShare: FileShare | undefined = fileShareManager.findFileShare(
+    sourceUuid,
+    req.session.user.uuid
+  );
+
+  if (!fileShare) {
+    res.sendStatus(400);
+
+    return;
+  }
+
+  res.send({
+    offer: fileShare.offer,
+  });
 });
 
-app.post("user/finishAddingFriend", (req, res) => {
+app.post("/receiveFile", (req, res) => {
   if (!req.session.user) {
     res.sendStatus(400);
 
     return;
   }
 
-  let friendship = userManager.findFriendship(req.session.user);
+  let fileShare: FileShare | undefined = fileShareManager.findFileShare(
+    null,
+    req.session.user.uuid
+  );
 
-  if (!friendship) {
+  if (!fileShare) {
     res.sendStatus(400);
 
     return;
   }
 
+  console.log(
+    `${req.session.user?.uuid} wants to receive a file from ${fileShare.sourceUuid}...`
+  );
+
+  fileShareManager.acceptFileShare(
+    fileShare.sourceUuid,
+    req.session.user!.uuid,
+    req.body.answer
+  );
+
   res.sendStatus(200);
 });
 
-app.post("user/goOffline", (req, res) => {
-  let user = req.session.user;
+app.get("/sendFile", (req, res) => {
+  if (!req.session.user) {
+    res.sendStatus(400);
 
-  console.log(`Logging user out: ${JSON.stringify(user)}`);
+    return;
+  }
 
-  req.session.destroy(() => {
-    let wentOffline = !userManager.hasUser(user);
+  let fileShare: FileShare | undefined = fileShareManager.findFileShare(
+    req.session.user.uuid,
+    null
+  );
 
-    res.sendStatus(wentOffline ? 200 : 400);
+  if (!fileShare) {
+    res.sendStatus(400);
 
-    if (wentOffline) {
-      console.log(`A user went offline: ${JSON.stringify(user)}`);
-    } else {
-      console.error(`User ${JSON.stringify(user)} failed to go offline!`);
-    }
+    return;
+  }
+
+  console.log(
+    `${req.session.user?.uuid} sends file to ${fileShare.targetUuid}...`
+  );
+
+  res.send({
+    answer: fileShare.answer,
   });
 });
 
 app.listen(PORT, () => {
   console.log("We are rollin'");
 });
+
+declare module "express-session" {
+  interface SessionData {
+    user: User;
+  }
+}
+
+class User {
+  readonly uuid: String;
+
+  constructor(uuid: String) {
+    this.uuid = uuid;
+  }
+}
